@@ -13,14 +13,17 @@
 }
 
 /* Reset */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
 /* Base */
-html, body {
+html,
+body {
     height: 100%;
     font-family: 'Caveat', cursive;
     background-color: var(--bg-primary);
@@ -90,8 +93,11 @@ html, body {
     transition: all 0.2s ease;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     transform: rotate(-0.5deg);
+    min-width: 44px;
+    min-height: 44px;
 }
 
 .btn-primary {
@@ -258,6 +264,20 @@ html, body {
 
 .modal-actions .btn-danger {
     margin-right: auto;
+}
+
+.help-content {
+    margin-bottom: 20px;
+}
+
+.help-content p {
+    margin-bottom: 12px;
+    font-size: 1.2rem;
+    line-height: 1.6;
+}
+
+.help-content strong {
+    color: var(--accent-blue);
 }
 
 /* Notification */

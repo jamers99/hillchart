@@ -1,10 +1,10 @@
 // Hill Curve Rendering Module
-const Hill = (function() {
+const Hill = (function () {
     // Hill configuration
     const config = {
         padding: 40,
-        amplitude: 130,
-        baselineY: 230,
+        amplitude: 180,
+        baselineY: 250,
         strokeWidth: 3
     };
 
@@ -12,8 +12,8 @@ const Hill = (function() {
     // Using a bell curve / gaussian-like shape
     function getYAtPosition(normalizedX) {
         // Bell curve: e^(-(x-0.5)^2 / (2 * sigma^2))
-        // Sigma controls the width of the bell
-        const sigma = 0.2;
+        // Sigma controls the width of the bell (smaller = more exaggerated/peaked)
+        const sigma = 0.18;
         const peak = 0.5;
         const exponent = -Math.pow(normalizedX - peak, 2) / (2 * sigma * sigma);
         const bellValue = Math.exp(exponent);

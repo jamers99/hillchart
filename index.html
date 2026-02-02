@@ -17,12 +17,13 @@
                 <button id="add-scope-btn" class="btn btn-primary">+ Add Scope</button>
                 <button id="copy-link-btn" class="btn btn-secondary">Copy Link</button>
                 <button id="export-btn" class="btn btn-secondary">Copy Image</button>
+                <button id="help-btn" class="btn btn-secondary">?</button>
             </div>
         </header>
 
         <main id="hill-chart-container" class="chart-container">
             <div id="export-wrapper">
-                <svg id="hill-svg" viewBox="0 0 800 280" preserveAspectRatio="xMidYMid meet">
+                <svg id="hill-svg" viewBox="0 0 800 320" preserveAspectRatio="xMidYMid meet">
                     <!-- Hill curve rendered here -->
                     <g id="hill-curve"></g>
 
@@ -30,8 +31,8 @@
                     <g id="scopes-layer"></g>
 
                     <!-- Labels -->
-                    <text x="200" y="260" class="hill-label">Figuring things out</text>
-                    <text x="600" y="260" class="hill-label">Making it happen</text>
+                    <text x="200" y="280" class="hill-label">Figuring things out</text>
+                    <text x="600" y="280" class="hill-label">Making it happen</text>
                 </svg>
             </div>
         </main>
@@ -60,6 +61,24 @@
                     <button type="button" class="btn btn-danger" id="modal-delete">Delete</button>
                     <button type="button" class="btn btn-secondary" id="edit-modal-cancel">Cancel</button>
                     <button type="button" class="btn btn-primary" id="modal-save">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Help Modal -->
+        <div id="help-modal" class="modal-overlay">
+            <div class="modal">
+                <h2>How to Use</h2>
+                <div class="help-content">
+                    <p><strong>Set a title:</strong> Click the title field and type your chart name</p>
+                    <p><strong>Add scopes:</strong> Click "+ Add Scope" and enter a name</p>
+                    <p><strong>Move scopes:</strong> Drag scopes left to right on the hill</p>
+                    <p><strong>Edit scopes:</strong> Double-click a scope to rename or delete it</p>
+                    <p><strong>Share:</strong> Click "Copy Link" to get a shareable URL</p>
+                    <p><strong>Export:</strong> Click "Copy Image" to copy a PNG to your clipboard</p>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="help-modal-close">Close</button>
                 </div>
             </div>
         </div>

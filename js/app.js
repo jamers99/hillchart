@@ -45,6 +45,9 @@ const App = (function () {
         // Add scope button
         document.getElementById('add-scope-btn').addEventListener('click', showAddScopeModal);
 
+        // Help button
+        document.getElementById('help-btn').addEventListener('click', showHelpModal);
+
         // Copy link button
         document.getElementById('copy-link-btn').addEventListener('click', Export.copyLink);
 
@@ -124,6 +127,19 @@ const App = (function () {
             }
         });
 
+        // Help modal handler
+        document.getElementById('help-modal-close').addEventListener('click', () => {
+            const helpModal = document.getElementById('help-modal');
+            helpModal.classList.remove('active');
+        });
+
+        const helpModal = document.getElementById('help-modal');
+        helpModal.addEventListener('click', (e) => {
+            if (e.target === helpModal) {
+                helpModal.classList.remove('active');
+            }
+        });
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             // Don't trigger shortcuts when typing in inputs
@@ -157,6 +173,12 @@ const App = (function () {
             input.focus();
             input.select();
         }, 100);
+    }
+
+    // Show help modal
+    function showHelpModal() {
+        const modal = document.getElementById('help-modal');
+        modal.classList.add('active');
     }
 
     // Initialize when DOM is ready
