@@ -1,102 +1,127 @@
 // Export Module
-const Export = (function() {
+const Export = (function () {
 
-    // Capture chart as PNG blob using canvas (more reliable for fonts)
+    // Capture chart as PNG blob by manually converting SVG to canvas
     async function captureAsBlob() {
-        const wrapper = document.getElementById('export-wrapper');
         const svg = document.getElementById('hill-svg');
 
         // Wait for fonts to be ready
         await document.fonts.ready;
 
-        // Clone the SVG and inline all styles
-        const svgClone = svg.cloneNode(true);
-
-        // Get computed styles and inline them on all text elements
-        const originalTexts = svg.querySelectorAll('text');
-        const clonedTexts = svgClone.querySelectorAll('text');
-
-        originalTexts.forEach((original, i) => {
-            const computed = getComputedStyle(original);
-            const clone = clonedTexts[i];
-            clone.style.fontFamily = 'Caveat, cursive';
-            clone.style.fontSize = computed.fontSize;
-            clone.style.fontWeight = computed.fontWeight;
-            clone.style.fontStyle = computed.fontStyle;
-            clone.style.fill = computed.fill;
-        });
-
-        // Add inline style block with font-face using data URL
-        // We'll fetch the Google Fonts CSS which includes the font URL
         try {
-            const fontCSS = await fetchAndEmbedFont();
-            if (fontCSS) {
-                const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-                styleEl.textContent = fontCSS;
-                svgClone.insertBefore(styleEl, svgClone.firstChild);
-            }
-        } catch (e) {
-            console.warn('Could not embed font, using fallback:', e);
-        }
+            // Clone the SVG
+            const svgClone = svg.cloneNode(true);
 
-        try {
-            const dataUrl = await htmlToImage.toPng(wrapper, {
-                pixelRatio: 2,
-                filter: (node) => {
-                    // Replace SVG with our modified clone during capture
-                    return true;
-                }
+            // Embed font data into the SVG
+            await embedFontInSVG(svgClone);
+
+            // Inline all styles from computed styles
+            inlineStyles(svg, svgClone);
+
+            // Get SVG dimensions
+            const bbox = svg.getBoundingClientRect();
+            const width = bbox.width;
+            const height = bbox.height;
+
+            // Convert SVG to string
+            const svgString = new XMLSerializer().serializeToString(svgClone);
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+
+            // Create image from SVG
+            const img = new Image();
+            img.width = width * 2; // 2x for high DPI
+            img.height = height * 2;
+
+            const loadPromise = new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
             });
 
-            const response = await fetch(dataUrl);
-            return response.blob();
+            img.src = svgUrl;
+            await loadPromise;
+
+            // Draw to canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = width * 2;
+            canvas.height = height * 2;
+            const ctx = canvas.getContext('2d');
+
+            // Dark blue background matching the app
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Clean up
+            URL.revokeObjectURL(svgUrl);
+
+            // Convert canvas to blob
+            return new Promise((resolve) => {
+                canvas.toBlob(resolve, 'image/png');
+            });
         } catch (err) {
             console.error('Failed to capture image:', err);
             throw err;
         }
     }
 
-    // Fetch Google Fonts CSS and convert font to embedded base64
-    async function fetchAndEmbedFont() {
+    // Embed font data directly into SVG
+    async function embedFontInSVG(svgElement) {
         try {
-            const cssResponse = await fetch(
-                'https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap'
-            );
-            const cssText = await cssResponse.text();
-
-            // Extract woff2 URL from the CSS
-            const woff2Match = cssText.match(/src:\s*url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.woff2)\)/);
-            if (!woff2Match) {
-                return null;
-            }
-
-            const fontUrl = woff2Match[1];
-            const fontResponse = await fetch(fontUrl);
-
-            if (!fontResponse.ok) {
-                return null;
-            }
-
-            const fontBuffer = await fontResponse.arrayBuffer();
-
-            // Convert to base64
-            const base64 = btoa(
-                new Uint8Array(fontBuffer)
-                    .reduce((data, byte) => data + String.fromCharCode(byte), '')
-            );
-
-            return `
+            // Use the pre-embedded font data from font-data.js
+            const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+            styleEl.textContent = `
                 @font-face {
                     font-family: 'Caveat';
                     font-style: normal;
-                    font-weight: 400 700;
-                    src: url(data:font/woff2;base64,${base64}) format('woff2');
+                    font-weight: 400;
+                    src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
                 }
             `;
+
+            // Insert at the beginning of the SVG
+            svgElement.insertBefore(styleEl, svgElement.firstChild);
         } catch (err) {
-            console.error('Failed to fetch font:', err);
-            return null;
+            console.error('Failed to embed font:', err);
         }
+    }
+
+    // Inline all computed styles into the cloned element
+    function inlineStyles(original, clone) {
+        // Handle the SVG root
+        const originalStyle = window.getComputedStyle(original);
+        clone.setAttribute('style', getCSSText(originalStyle));
+
+        // Handle all child elements
+        const originalChildren = original.getElementsByTagName('*');
+        const cloneChildren = clone.getElementsByTagName('*');
+
+        for (let i = 0; i < originalChildren.length; i++) {
+            const originalChild = originalChildren[i];
+            const cloneChild = cloneChildren[i];
+            const style = window.getComputedStyle(originalChild);
+
+            // Inline critical styles
+            cloneChild.setAttribute('style', getCSSText(style));
+        }
+    }
+
+    // Convert computed style to CSS text with important properties
+    function getCSSText(style) {
+        const important = [
+            'font-family', 'font-size', 'font-weight', 'font-style',
+            'fill', 'stroke', 'stroke-width', 'opacity',
+            'text-anchor', 'dominant-baseline'
+        ];
+
+        return important
+            .map(prop => {
+                const value = style.getPropertyValue(prop);
+                return value ? `${prop}: ${value};` : '';
+            })
+            .filter(Boolean)
+            .join(' ');
     }
 
     // Copy image to clipboard
