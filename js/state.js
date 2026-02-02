@@ -100,7 +100,7 @@ const State = (function () {
         },
 
         // Add a new scope
-        addScope(name, position = 0.1) {
+        addScope(name, position = 0) {
             const newScope = {
                 id: generateId(),
                 name: name.trim() || 'New Scope',
