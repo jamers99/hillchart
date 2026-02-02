@@ -1,5 +1,5 @@
 // State Management Module
-const State = (function() {
+const State = (function () {
     // Default state
     const defaultState = {
         title: 'My Hill Chart',
@@ -147,9 +147,6 @@ const State = (function() {
         getShareableURL() {
             pushToURL(true);
             return window.location.href;
-        },
-
-        // Generate ID utility
-        generateId
+        }
     };
 })();

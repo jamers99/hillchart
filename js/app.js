@@ -1,5 +1,5 @@
 // Main Application Module
-const App = (function() {
+const App = (function () {
     let svg;
     let editingScopeId = null;
 
@@ -55,37 +55,48 @@ const App = (function() {
         const addModal = document.getElementById('add-scope-modal');
         const scopeNameInput = document.getElementById('scope-name-input');
 
-        document.getElementById('modal-cancel').addEventListener('click', () => {
-            addModal.classList.remove('active');
+        // Edit scope modal
+        const editModal = document.getElementById('edit-scope-modal');
+        const editNameInput = document.getElementById('edit-scope-name-input');
+
+        // Helper to close a modal
+        function closeModal(modal) {
+            modal.classList.remove('active');
+            if (modal === editModal) {
+                editingScopeId = null;
+            }
+        }
+
+        // Setup backdrop click handlers for both modals
+        [addModal, editModal].forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal(modal);
+            });
         });
+
+        // Add modal handlers
+        document.getElementById('modal-cancel').addEventListener('click', () => closeModal(addModal));
 
         document.getElementById('modal-add').addEventListener('click', () => {
             const name = scopeNameInput.value.trim();
             if (name) {
                 State.addScope(name);
                 scopeNameInput.value = '';
-                addModal.classList.remove('active');
+                closeModal(addModal);
             }
         });
 
-        // Enter key in add modal
         scopeNameInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 document.getElementById('modal-add').click();
             } else if (e.key === 'Escape') {
-                addModal.classList.remove('active');
+                closeModal(addModal);
             }
         });
 
-        // Edit scope modal
-        const editModal = document.getElementById('edit-scope-modal');
-        const editNameInput = document.getElementById('edit-scope-name-input');
-
-        document.getElementById('edit-modal-cancel').addEventListener('click', () => {
-            editModal.classList.remove('active');
-            editingScopeId = null;
-        });
+        // Edit modal handlers
+        document.getElementById('edit-modal-cancel').addEventListener('click', () => closeModal(editModal));
 
         document.getElementById('modal-save').addEventListener('click', () => {
             if (editingScopeId) {
@@ -93,41 +104,23 @@ const App = (function() {
                 if (name) {
                     State.updateScope(editingScopeId, { name });
                 }
-                editModal.classList.remove('active');
-                editingScopeId = null;
+                closeModal(editModal);
             }
         });
 
         document.getElementById('modal-delete').addEventListener('click', () => {
             if (editingScopeId) {
                 State.removeScope(editingScopeId);
-                editModal.classList.remove('active');
-                editingScopeId = null;
+                closeModal(editModal);
             }
         });
 
-        // Enter key in edit modal
         editNameInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 document.getElementById('modal-save').click();
             } else if (e.key === 'Escape') {
-                editModal.classList.remove('active');
-                editingScopeId = null;
-            }
-        });
-
-        // Close modals on backdrop click
-        addModal.addEventListener('click', (e) => {
-            if (e.target === addModal) {
-                addModal.classList.remove('active');
-            }
-        });
-
-        editModal.addEventListener('click', (e) => {
-            if (e.target === editModal) {
-                editModal.classList.remove('active');
-                editingScopeId = null;
+                closeModal(editModal);
             }
         });
 

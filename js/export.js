@@ -1,7 +1,7 @@
 // Export Module
 const Export = (function () {
 
-    // Capture chart as PNG blob by manually converting SVG to canvas
+    // Capture chart as PNG blob
     async function captureAsBlob() {
         const svg = document.getElementById('hill-svg');
 
@@ -9,119 +9,79 @@ const Export = (function () {
         await document.fonts.ready;
 
         try {
-            // Clone the SVG
+            // Clone and prepare SVG for export
             const svgClone = svg.cloneNode(true);
+            embedFontInSVG(svgClone);
+            inlineTextStyles(svgClone);
 
-            // Embed font data into the SVG
-            await embedFontInSVG(svgClone);
-
-            // Inline all styles from computed styles
-            inlineStyles(svg, svgClone);
-
-            // Get SVG dimensions
+            // Get dimensions and convert to canvas
             const bbox = svg.getBoundingClientRect();
-            const width = bbox.width;
-            const height = bbox.height;
-
-            // Convert SVG to string
-            const svgString = new XMLSerializer().serializeToString(svgClone);
-            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-            const svgUrl = URL.createObjectURL(svgBlob);
-
-            // Create image from SVG
-            const img = new Image();
-            img.width = width * 2; // 2x for high DPI
-            img.height = height * 2;
-
-            const loadPromise = new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-            });
-
-            img.src = svgUrl;
-            await loadPromise;
-
-            // Draw to canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = width * 2;
-            canvas.height = height * 2;
-            const ctx = canvas.getContext('2d');
-
-            // Dark blue background matching the app
-            ctx.fillStyle = '#1a1a2e';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            // Clean up
-            URL.revokeObjectURL(svgUrl);
+            const canvas = await svgToCanvas(svgClone, bbox.width, bbox.height);
 
             // Convert canvas to blob
-            return new Promise((resolve) => {
-                canvas.toBlob(resolve, 'image/png');
-            });
+            return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
         } catch (err) {
             console.error('Failed to capture image:', err);
             throw err;
         }
     }
 
-    // Embed font data directly into SVG
-    async function embedFontInSVG(svgElement) {
-        try {
-            // Use the pre-embedded font data from font-data.js
-            const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-            styleEl.textContent = `
-                @font-face {
-                    font-family: 'Caveat';
-                    font-style: normal;
-                    font-weight: 400;
-                    src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
-                }
-            `;
-
-            // Insert at the beginning of the SVG
-            svgElement.insertBefore(styleEl, svgElement.firstChild);
-        } catch (err) {
-            console.error('Failed to embed font:', err);
-        }
+    // Embed font data into SVG
+    function embedFontInSVG(svgElement) {
+        const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        styleEl.textContent = `
+            @font-face {
+                font-family: 'Caveat';
+                font-style: normal;
+                font-weight: 400;
+                src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
+            }
+            text {
+                font-family: 'Caveat', cursive;
+                fill: #eaeaea;
+            }
+        `;
+        svgElement.insertBefore(styleEl, svgElement.firstChild);
     }
 
-    // Inline all computed styles into the cloned element
-    function inlineStyles(original, clone) {
-        // Handle the SVG root
-        const originalStyle = window.getComputedStyle(original);
-        clone.setAttribute('style', getCSSText(originalStyle));
-
-        // Handle all child elements
-        const originalChildren = original.getElementsByTagName('*');
-        const cloneChildren = clone.getElementsByTagName('*');
-
-        for (let i = 0; i < originalChildren.length; i++) {
-            const originalChild = originalChildren[i];
-            const cloneChild = cloneChildren[i];
-            const style = window.getComputedStyle(originalChild);
-
-            // Inline critical styles
-            cloneChild.setAttribute('style', getCSSText(style));
-        }
+    // Inline styles for text elements only (SVG attributes are already inline)
+    function inlineTextStyles(svgElement) {
+        const texts = svgElement.querySelectorAll('text');
+        texts.forEach(text => {
+            if (!text.hasAttribute('fill')) {
+                text.setAttribute('fill', '#eaeaea');
+            }
+        });
     }
 
-    // Convert computed style to CSS text with important properties
-    function getCSSText(style) {
-        const important = [
-            'font-family', 'font-size', 'font-weight', 'font-style',
-            'fill', 'stroke', 'stroke-width', 'opacity',
-            'text-anchor', 'dominant-baseline'
-        ];
+    // Convert SVG to canvas with background
+    async function svgToCanvas(svgElement, width, height) {
+        const svgString = new XMLSerializer().serializeToString(svgElement);
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const svgUrl = URL.createObjectURL(svgBlob);
 
-        return important
-            .map(prop => {
-                const value = style.getPropertyValue(prop);
-                return value ? `${prop}: ${value};` : '';
-            })
-            .filter(Boolean)
-            .join(' ');
+        const img = new Image();
+        img.width = width * 2;
+        img.height = height * 2;
+
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = svgUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width * 2;
+        canvas.height = height * 2;
+        const ctx = canvas.getContext('2d');
+
+        // Background color
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        URL.revokeObjectURL(svgUrl);
+        return canvas;
     }
 
     // Copy image to clipboard
@@ -216,11 +176,6 @@ const Export = (function () {
 
     return {
         copyToClipboard,
-        downloadAsPNG,
-        copyLink,
-        showNotification
+        copyLink
     };
 })();
-
-// Make showNotification globally accessible
-const showNotification = Export.showNotification;

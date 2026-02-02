@@ -1,5 +1,5 @@
 // Scope Management Module
-const Scope = (function() {
+const Scope = (function () {
     // Color palette for scopes - will be selected based on name hash
     const colors = [
         '#22c55e', // green
@@ -143,7 +143,6 @@ const Scope = (function() {
     }
 
     return {
-        renderAll,
-        getColorForName
+        renderAll
     };
 })();
