@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hill Chart</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="toolbar">
+            <input type="text" id="chart-title" class="chart-title" value="My Hill Chart" placeholder="Chart Title">
+            <div class="toolbar-actions">
+                <button id="add-scope-btn" class="btn btn-primary">+ Add Scope</button>
+                <button id="copy-link-btn" class="btn btn-secondary">Copy Link</button>
+                <button id="export-btn" class="btn btn-secondary">Copy Image</button>
+            </div>
+        </header>
+
+        <main id="hill-chart-container" class="chart-container">
+            <div id="export-wrapper">
+            <svg id="hill-svg" viewBox="0 0 800 280" preserveAspectRatio="xMidYMid meet">
+                <!-- Hill curve rendered here -->
+                <g id="hill-curve"></g>
+
+                <!-- Scopes rendered here -->
+                <g id="scopes-layer"></g>
+
+                <!-- Labels -->
+                <text x="200" y="260" class="hill-label">Figuring things out</text>
+                <text x="600" y="260" class="hill-label">Making it happen</text>
+            </svg>
+            </div>
+        </main>
+
+        <!-- Notifications -->
+        <div id="notification" class="notification"></div>
+
+        <!-- Add Scope Modal -->
+        <div id="add-scope-modal" class="modal-overlay">
+            <div class="modal">
+                <h2>Add Scope</h2>
+                <input type="text" id="scope-name-input" placeholder="Scope name" autofocus>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="modal-add">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Scope Modal -->
+        <div id="edit-scope-modal" class="modal-overlay">
+            <div class="modal">
+                <h2>Edit Scope</h2>
+                <input type="text" id="edit-scope-name-input" placeholder="Scope name">
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-danger" id="modal-delete">Delete</button>
+                    <button type="button" class="btn btn-secondary" id="edit-modal-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="modal-save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js"></script>
+
+    <!-- Application -->
+    <script src="js/state.js"></script>
+    <script src="js/hill.js"></script>
+    <script src="js/scope.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
