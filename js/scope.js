@@ -180,6 +180,25 @@ const Scope = (function () {
         group.addEventListener('dblclick', () => App.showEditScopeModal(scope.id));
 
         layer.appendChild(group);
+
+        const viewBox = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : null;
+        const svgWidth = viewBox ? viewBox.width : (Hill.config.svgWidth || 800);
+        const labelPadding = 6;
+        const labelBox = label.getBBox();
+        const halfWidth = labelBox.width / 2;
+        const minX = halfWidth + labelPadding;
+        const maxX = svgWidth - halfWidth - labelPadding;
+        let clampedX = x;
+
+        if (minX > maxX) {
+            clampedX = svgWidth / 2;
+        } else {
+            clampedX = Math.min(Math.max(x, minX), maxX);
+        }
+
+        if (clampedX !== x) {
+            label.setAttribute('x', clampedX);
+        }
     }
 
     // Render all scopes

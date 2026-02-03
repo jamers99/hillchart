@@ -57,14 +57,14 @@ const Hill = (function () {
     }
 
     // Calculate actual X coordinate from normalized position
-    function getXAtPosition(normalizedX, svgWidth = 800) {
+    function getXAtPosition(normalizedX, svgWidth = (config.svgWidth || 800)) {
         const startX = config.padding;
         const endX = svgWidth - config.padding;
         return startX + normalizedX * (endX - startX);
     }
 
     // Convert mouse/touch X to normalized position (0-1)
-    function normalizeX(x, svgWidth = 800) {
+    function normalizeX(x, svgWidth = (config.svgWidth || 800)) {
         const startX = config.padding;
         const endX = svgWidth - config.padding;
         const clamped = Math.max(startX, Math.min(endX, x));
@@ -79,6 +79,9 @@ const Hill = (function () {
         const viewBox = svgElement.viewBox.baseVal;
         const width = viewBox.width;
         const height = viewBox.height;
+
+        config.svgWidth = width;
+        config.svgHeight = height;
 
         const pathData = generatePath(width, height);
 

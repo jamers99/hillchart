@@ -148,7 +148,7 @@ body {
     background-color: var(--bg-secondary);
     padding: 20px;
     width: 100%;
-    max-width: 900px;
+    max-width: 980px;
     border: 2px solid var(--border-color);
     border-radius: 4px;
 }

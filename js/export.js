@@ -1,32 +1,47 @@
-// Export Module
 const Export = (function () {
-
-    // Capture chart as PNG blob
     async function captureAsBlob() {
-        const svg = document.getElementById('hill-svg');
-
-        // Wait for fonts to be ready
-        await document.fonts.ready;
-
-        try {
-            // Clone and prepare SVG for export
-            const svgClone = svg.cloneNode(true);
-            embedFontInSVG(svgClone);
-            inlineTextStyles(svgClone);
-
-            // Get dimensions and convert to canvas
-            const bbox = svg.getBoundingClientRect();
-            const canvas = await svgToCanvas(svgClone, bbox.width, bbox.height);
-
-            // Convert canvas to blob
-            return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-        } catch (err) {
-            console.error('Failed to capture image:', err);
-            throw err;
+        if (document.fonts && document.fonts.ready) {
+            await document.fonts.ready;
         }
+
+        const exportWrapper = document.getElementById('export-wrapper');
+        const svg = document.getElementById('hill-svg');
+        if (!exportWrapper || !svg) {
+            throw new Error('Export unavailable: missing wrapper or svg');
+        }
+
+        const svgClone = svg.cloneNode(true);
+        embedFontInSVG(svgClone);
+        inlineTextStyles(svgClone);
+
+        const wrapperRect = exportWrapper.getBoundingClientRect();
+        const svgRect = svg.getBoundingClientRect();
+        const computedStyles = window.getComputedStyle(exportWrapper);
+        const padding = readBoxValues(computedStyles, 'padding');
+        const border = readBoxValues(computedStyles, 'border');
+        const backgroundColor = computedStyles.backgroundColor || '#1a1a2e';
+        const borderColor = computedStyles.borderTopColor || '#2a2a4a';
+
+        const innerWidth = wrapperRect.width - padding.left - padding.right - border.left - border.right;
+        const innerHeight = wrapperRect.height - padding.top - padding.bottom - border.top - border.bottom;
+        const drawWidth = Math.max(1, innerWidth || svgRect.width);
+        const drawHeight = Math.max(1, innerHeight || svgRect.height);
+
+        const canvas = await svgToCanvas(svgClone, {
+            wrapperWidth: wrapperRect.width,
+            wrapperHeight: wrapperRect.height,
+            drawWidth,
+            drawHeight,
+            offsetX: padding.left + border.left,
+            offsetY: padding.top + border.top,
+            backgroundColor,
+            borderColor,
+            borderWidth: border.top
+        });
+
+        return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     }
 
-    // Embed font data into SVG
     function embedFontInSVG(svgElement) {
         const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
         styleEl.textContent = `
@@ -34,6 +49,12 @@ const Export = (function () {
                 font-family: 'Caveat';
                 font-style: normal;
                 font-weight: 400;
+                src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
+            }
+            @font-face {
+                font-family: 'Caveat';
+                font-style: normal;
+                font-weight: 700;
                 src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
             }
             text {
@@ -44,25 +65,34 @@ const Export = (function () {
         svgElement.insertBefore(styleEl, svgElement.firstChild);
     }
 
-    // Inline styles for text elements only (SVG attributes are already inline)
     function inlineTextStyles(svgElement) {
         const texts = svgElement.querySelectorAll('text');
         texts.forEach(text => {
-            if (!text.hasAttribute('fill')) {
+            text.setAttribute('font-family', 'Caveat, cursive');
+            if (text.classList.contains('scope-label')) {
+                text.setAttribute('fill', '#eaeaea');
+                text.setAttribute('font-size', '22px');
+                text.setAttribute('font-weight', '700');
+                text.setAttribute('text-anchor', 'middle');
+            } else if (text.classList.contains('hill-label')) {
+                text.setAttribute('fill', '#a0a0a0');
+                text.setAttribute('font-size', '22px');
+                text.setAttribute('font-style', 'italic');
+                text.setAttribute('text-anchor', 'middle');
+            } else if (!text.hasAttribute('fill')) {
                 text.setAttribute('fill', '#eaeaea');
             }
         });
     }
 
-    // Convert SVG to canvas with background
-    async function svgToCanvas(svgElement, width, height) {
+    async function svgToCanvas(svgElement, options) {
         const svgString = new XMLSerializer().serializeToString(svgElement);
         const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
         const svgUrl = URL.createObjectURL(svgBlob);
 
         const img = new Image();
-        img.width = width * 2;
-        img.height = height * 2;
+        img.width = options.drawWidth * 2;
+        img.height = options.drawHeight * 2;
 
         await new Promise((resolve, reject) => {
             img.onload = resolve;
@@ -71,20 +101,38 @@ const Export = (function () {
         });
 
         const canvas = document.createElement('canvas');
-        canvas.width = width * 2;
-        canvas.height = height * 2;
+        canvas.width = Math.max(1, options.wrapperWidth) * 2;
+        canvas.height = Math.max(1, options.wrapperHeight) * 2;
         const ctx = canvas.getContext('2d');
 
-        // Background color
-        ctx.fillStyle = '#1a1a2e';
+        ctx.fillStyle = options.backgroundColor || '#1a1a2e';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        if (options.borderWidth > 0) {
+            ctx.strokeStyle = options.borderColor || '#2a2a4a';
+            ctx.lineWidth = options.borderWidth * 2;
+            const inset = ctx.lineWidth / 2;
+            ctx.strokeRect(inset, inset, canvas.width - ctx.lineWidth, canvas.height - ctx.lineWidth);
+        }
+
+        const offsetX = options.offsetX * 2;
+        const offsetY = options.offsetY * 2;
+        const drawWidth = options.drawWidth * 2;
+        const drawHeight = options.drawHeight * 2;
+        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
         URL.revokeObjectURL(svgUrl);
         return canvas;
     }
 
-    // Copy image to clipboard
+    function readBoxValues(style, prefix) {
+        const top = parseFloat(style[`${prefix}Top`]) || 0;
+        const right = parseFloat(style[`${prefix}Right`]) || 0;
+        const bottom = parseFloat(style[`${prefix}Bottom`]) || 0;
+        const left = parseFloat(style[`${prefix}Left`]) || 0;
+        return { top, right, bottom, left };
+    }
+
     async function copyToClipboard() {
         try {
             const blob = await captureAsBlob();
@@ -103,7 +151,6 @@ const Export = (function () {
         }
     }
 
-    // Download as PNG file
     async function downloadAsPNG() {
         try {
             const blob = await captureAsBlob();
@@ -131,7 +178,6 @@ const Export = (function () {
         }
     }
 
-    // Copy shareable link
     function copyLink() {
         const url = State.getShareableURL();
 
@@ -144,7 +190,6 @@ const Export = (function () {
         }
     }
 
-    // Fallback for older browsers
     function fallbackCopyLink(url) {
         const textarea = document.createElement('textarea');
         textarea.value = url;
@@ -163,7 +208,6 @@ const Export = (function () {
         document.body.removeChild(textarea);
     }
 
-    // Show notification
     function showNotification(message, type = 'success') {
         const notification = document.getElementById('notification');
         notification.textContent = message;
