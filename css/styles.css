@@ -100,6 +100,10 @@ body {
     min-height: 44px;
 }
 
+#help-btn {
+    text-indent: -5px;
+}
+
 .btn-primary {
     background-color: var(--accent-blue);
     color: white;
