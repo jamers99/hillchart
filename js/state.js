@@ -17,18 +17,47 @@ const State = (function () {
         return Math.random().toString(36).substring(2, 8);
     }
 
-    // Serialize state to URL-safe string
+    // Convert state to minified format for storage (0-1 positions to 0-999 integers)
+    function toStorageFormat(state) {
+        return {
+            t: state.title,
+            s: state.scopes.map(scope => ({
+                i: scope.id,
+                n: scope.name,
+                p: Math.round(scope.position * 999)
+            }))
+        };
+    }
+
+    // Convert minified state back to internal format (0-999 positions to 0-1 floats)
+    function fromStorageFormat(minified) {
+        return {
+            title: minified.t,
+            scopes: minified.s.map(scope => ({
+                id: scope.i,
+                name: scope.n,
+                position: scope.p / 999
+            }))
+        };
+    }
+
+    // Serialize state to URL-safe compressed string
     function serialize(state) {
-        const json = JSON.stringify(state);
-        // Use base64 encoding with URI encoding for special chars
-        return btoa(unescape(encodeURIComponent(json)));
+        const minified = toStorageFormat(state);
+        const json = JSON.stringify(minified);
+        return LZString.compressToEncodedURIComponent(json);
     }
 
     // Deserialize state from URL string
     function deserialize(encoded) {
         try {
-            const json = decodeURIComponent(escape(atob(encoded)));
-            return JSON.parse(json);
+            const json = LZString.decompressFromEncodedURIComponent(encoded);
+            if (!json) {
+                console.warn('Failed to decompress state from URL');
+                return null;
+            }
+            const minified = JSON.parse(json);
+            return fromStorageFormat(minified);
         } catch (e) {
             console.warn('Failed to parse state from URL:', e);
             return null;
