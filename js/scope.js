@@ -74,21 +74,77 @@ const Scope = (function () {
         document.removeEventListener('touchend', endDrag);
     }
 
-    // Render a single scope
-    function renderScope(scope, layer, svg) {
+    // Calculate vertical offsets for scope labels to prevent overlap
+    function calculateLabelOffsets(scopes) {
+        const BASE_OFFSET = -24;      // default label position above dot
+        const LABEL_SPACING = 28;     // vertical spacing between stacked labels
+        const MIN_OFFSET = -250;      // maximum upward offset to stay on-screen
+        const PROXIMITY_THRESHOLD = 80; // pixel distance to group nearby scopes
+
+        const labelOffsets = {};
+        scopes.forEach(scope => {
+            labelOffsets[scope.id] = BASE_OFFSET;
+        });
+
+        if (scopes.length < 2) return labelOffsets;
+
+        // Map scopes to their screen positions
+        const scopePositions = scopes.map(scope => ({
+            index: scopes.indexOf(scope),
+            id: scope.id,
+            x: Hill.getXAtPosition(scope.position)
+        }));
+
+        // Find groups of nearby scopes that need label stacking
+        const processed = new Set();
+        const groups = [];
+
+        for (let i = 0; i < scopePositions.length; i++) {
+            if (processed.has(scopePositions[i].id)) continue;
+
+            const group = [i];
+            processed.add(scopePositions[i].id);
+
+            for (let j = i + 1; j < scopePositions.length; j++) {
+                if (processed.has(scopePositions[j].id)) continue;
+                if (Math.abs(scopePositions[i].x - scopePositions[j].x) < PROXIMITY_THRESHOLD) {
+                    group.push(j);
+                    processed.add(scopePositions[j].id);
+                }
+            }
+
+            if (group.length > 1) {
+                groups.push(group);
+            }
+        }
+
+        // Stack labels for each group of overlapping scopes
+        groups.forEach(group => {
+            group.sort((a, b) => scopePositions[a].x - scopePositions[b].x);
+            group.forEach((posIdx, stackLevel) => {
+                const offset = BASE_OFFSET - (stackLevel * LABEL_SPACING);
+                labelOffsets[scopePositions[posIdx].id] = Math.max(offset, MIN_OFFSET);
+            });
+        });
+
+        return labelOffsets;
+    }
+
+    // Render a single scope dot and label
+    function renderScope(scope, layer, svg, labelOffset = 0) {
         const x = Hill.getXAtPosition(scope.position);
         const y = Hill.getYAtPosition(scope.position);
         const color = getColorForName(scope.name);
 
-        // Create group
+        // Create SVG group for this scope
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'scope-group');
         group.setAttribute('data-scope-id', scope.id);
 
-        // Create sketchy dot using Rough.js
+        // Render dot (sketchy or fallback)
         if (typeof rough !== 'undefined') {
             const rc = rough.svg(svg);
-            const roughCircle = rc.circle(x, y, 26, {
+            const dot = rc.circle(x, y, 26, {
                 fill: color,
                 fillStyle: 'solid',
                 stroke: '#ffffff',
@@ -96,10 +152,9 @@ const Scope = (function () {
                 roughness: 0.3,
                 bowing: 0.2
             });
-            roughCircle.setAttribute('class', 'scope-dot');
-            group.appendChild(roughCircle);
+            dot.setAttribute('class', 'scope-dot');
+            group.appendChild(dot);
         } else {
-            // Fallback to regular circle
             const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             dot.setAttribute('class', 'scope-dot');
             dot.setAttribute('cx', x);
@@ -111,23 +166,18 @@ const Scope = (function () {
             group.appendChild(dot);
         }
 
-        // Create label
+        // Render label with offset to avoid overlaps
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         label.setAttribute('class', 'scope-label');
         label.setAttribute('x', x);
-        label.setAttribute('y', y - 24);
+        label.setAttribute('y', y + labelOffset);
         label.textContent = scope.name;
-
         group.appendChild(label);
 
-        // Add drag handlers
+        // Attach event handlers
         group.addEventListener('mousedown', (e) => startDrag(e, scope.id));
         group.addEventListener('touchstart', (e) => startDrag(e, scope.id), { passive: false });
-
-        // Add double-click to edit
-        group.addEventListener('dblclick', () => {
-            App.showEditScopeModal(scope.id);
-        });
+        group.addEventListener('dblclick', () => App.showEditScopeModal(scope.id));
 
         layer.appendChild(group);
     }
@@ -139,7 +189,12 @@ const Scope = (function () {
         layer.innerHTML = '';
 
         const state = State.get();
-        state.scopes.forEach(scope => renderScope(scope, layer, svg));
+
+        // Calculate label offsets to avoid overlaps
+        const labelOffsets = calculateLabelOffsets(state.scopes);
+
+        // Render each scope with its calculated label offset
+        state.scopes.forEach(scope => renderScope(scope, layer, svg, labelOffsets[scope.id]));
     }
 
     return {
