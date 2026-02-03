@@ -180,13 +180,16 @@ const Export = (function () {
 
     function copyLink() {
         const url = State.getShareableURL();
+        const state = State.get();
+        const title = state.title || 'Hill Chart';
+        const markdownLink = `[${title}](${url})`;
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url)
-                .then(() => showNotification('Link copied to clipboard!', 'success'))
-                .catch(() => fallbackCopyLink(url));
+            navigator.clipboard.writeText(markdownLink)
+                .then(() => showNotification('Markdown link copied to clipboard!', 'success'))
+                .catch(() => fallbackCopyLink(markdownLink));
         } else {
-            fallbackCopyLink(url);
+            fallbackCopyLink(markdownLink);
         }
     }
 
