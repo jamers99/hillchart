@@ -4,26 +4,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hill Chart</title>
+    <title>Hill Chart - Visualize Project Progress with Shape Up</title>
+    <meta name="description"
+        content="Free online Hill Chart tool for visualizing project progress using Shape Up methodology. Drag scopes along the hill to show problem-solving and execution phases.">
+    <meta name="keywords" content="hill chart, shape up, project management, basecamp, progress tracking">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://jamers99.github.io/hillchart/">
     <script src="js/font-data.js"></script>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
 <body>
+    <h1 class="visually-hidden">Hill Chart - Project Progress Visualization Tool</h1>
     <div class="app-container">
         <header class="toolbar">
-            <input type="text" id="chart-title" class="chart-title" value="My Hill Chart" placeholder="Chart Title">
-            <div class="toolbar-actions">
-                <button id="add-scope-btn" class="btn btn-primary">+ Add Scope</button>
-                <button id="copy-link-btn" class="btn btn-secondary">Copy Link</button>
-                <button id="export-btn" class="btn btn-secondary">Copy Image</button>
-                <button id="help-btn" class="btn btn-secondary">?</button>
-            </div>
+            <input type="text" id="chart-title" class="chart-title" value="My Hill Chart" placeholder="Chart Title"
+                aria-label="Chart title">
+            <nav class="toolbar-actions" aria-label="Main actions">
+                <button id="add-scope-btn" class="btn btn-primary" aria-label="Add new scope">+ Add Scope</button>
+                <button id="copy-link-btn" class="btn btn-secondary" aria-label="Copy shareable link">Copy Link</button>
+                <button id="export-btn" class="btn btn-secondary" aria-label="Copy chart as image">Copy Image</button>
+                <button id="help-btn" class="btn btn-secondary" aria-label="Show help">?</button>
+            </nav>
         </header>
 
         <main id="hill-chart-container" class="chart-container">
             <div id="export-wrapper">
-                <svg id="hill-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet">
+                <svg id="hill-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img"
+                    aria-label="Hill chart visualization">
                     <!-- Hill curve rendered here -->
                     <g id="hill-curve"></g>
 
@@ -76,6 +84,10 @@
                     <p><strong>Edit scopes:</strong> Double-click a scope to rename or delete it</p>
                     <p><strong>Share:</strong> Click "Copy Link" to get a shareable URL</p>
                     <p><strong>Export:</strong> Click "Copy Image" to copy a PNG to your clipboard</p>
+                    <p style="margin-top: 1.5em; text-align: center;">
+                        <a href="https://github.com/jamers99/hillchart" target="_blank" rel="noopener noreferrer"
+                            style="color: var(--accent-blue); text-decoration: none;">View source on GitHub →</a>
+                    </p>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="help-modal-close">Close</button>

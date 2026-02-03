@@ -30,6 +30,19 @@ body {
     color: var(--text-primary);
 }
 
+/* Accessibility */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* App Container */
 .app-container {
     display: flex;
