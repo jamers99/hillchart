@@ -2,6 +2,8 @@
 
 A simple, static web app for creating and sharing [Shape Up](https://basecamp.com/shapeup) Hill Charts.
 
+_Disclaimer: this is just an evening of vibes, use at your own risk :D_
+
 ## What are Hill Charts?
 
 Hill Charts visualize project progress. Each scope moves along a hill:
