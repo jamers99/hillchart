@@ -1,5 +1,15 @@
 // Scope Management Module
 const Scope = (function () {
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    // Label layout constants (SVG viewBox units)
+    const BASE_OFFSET = 24;       // label sits this far above its dot
+    const LABEL_SPACING = 28;     // vertical step when labels are pushed up
+    const LABEL_GAP = 12;         // min horizontal gap between neighboring labels
+    const MIN_LABEL_Y = 22;       // labels never rise above this (22px font ascent)
+    const MAX_LABEL_WIDTH = 300;  // labels longer than this get truncated with …
+    const EDGE_PADDING = 6;       // min distance from label to viewBox edge
+
     // Color palette for scopes - will be selected based on name hash
     const colors = [
         '#22c55e', // green
@@ -26,16 +36,31 @@ const Scope = (function () {
         return colors[index];
     }
 
+    // Stable RoughJS seed per scope, so dots keep their sketch across re-renders
+    // instead of re-randomizing (visible wiggle) on every drag frame
+    function seedFromId(id) {
+        let seed = 0;
+        for (let i = 0; i < id.length; i++) {
+            seed = (seed * 31 + id.charCodeAt(i)) % 2147483647;
+        }
+        return seed + 1;
+    }
+
     // Currently dragging scope
     let draggingScope = null;
     let svgElement = null;
 
+    // Last tap on a scope, for double-tap-to-edit on touch/pen
+    let lastTap = null;
+
     // Convert client coordinates to SVG coordinates
     function clientToSVG(clientX, clientY) {
+        const ctm = svgElement.getScreenCTM();
+        if (!ctm) return null;
         const pt = svgElement.createSVGPoint();
         pt.x = clientX;
         pt.y = clientY;
-        return pt.matrixTransform(svgElement.getScreenCTM().inverse());
+        return pt.matrixTransform(ctm.inverse());
     }
 
     // Handle drag start
@@ -43,11 +68,19 @@ const Scope = (function () {
         e.preventDefault();
         draggingScope = scopeId;
 
-        const point = e.touches ? e.touches[0] : e;
-        document.addEventListener('mousemove', onDrag);
-        document.addEventListener('mouseup', endDrag);
-        document.addEventListener('touchmove', onDrag, { passive: false });
-        document.addEventListener('touchend', endDrag);
+        // Capture on the SVG root, not the dot: every drag move re-renders and
+        // destroys the dot element, which would silently kill its capture
+        if (svgElement && svgElement.setPointerCapture && e.pointerId !== undefined) {
+            try {
+                svgElement.setPointerCapture(e.pointerId);
+            } catch (err) {
+                // capture is best-effort; document listeners still receive events
+            }
+        }
+
+        document.addEventListener('pointermove', onDrag);
+        document.addEventListener('pointerup', endDrag);
+        document.addEventListener('pointercancel', endDrag);
     }
 
     // Handle drag move
@@ -55,91 +88,115 @@ const Scope = (function () {
         if (!draggingScope) return;
         e.preventDefault();
 
-        const point = e.touches ? e.touches[0] : e;
-        const svgPoint = clientToSVG(point.clientX, point.clientY);
+        const svgPoint = clientToSVG(e.clientX, e.clientY);
+        if (!svgPoint) return;
 
-        // Normalize X position
         const normalizedX = Hill.normalizeX(svgPoint.x);
-
-        // Update scope position in state
         State.updateScope(draggingScope, { position: normalizedX });
     }
 
     // Handle drag end
     function endDrag() {
         draggingScope = null;
-        document.removeEventListener('mousemove', onDrag);
-        document.removeEventListener('mouseup', endDrag);
-        document.removeEventListener('touchmove', onDrag);
-        document.removeEventListener('touchend', endDrag);
+        document.removeEventListener('pointermove', onDrag);
+        document.removeEventListener('pointerup', endDrag);
+        document.removeEventListener('pointercancel', endDrag);
     }
 
-    // Calculate vertical offsets for scope labels to prevent overlap
-    function calculateLabelOffsets(scopes) {
-        const BASE_OFFSET = -24;      // default label position above dot
-        const LABEL_SPACING = 28;     // vertical spacing between stacked labels
-        const MIN_OFFSET = -250;      // maximum upward offset to stay on-screen
-        const PROXIMITY_THRESHOLD = 80; // pixel distance to group nearby scopes
-
-        const labelOffsets = {};
-        scopes.forEach(scope => {
-            labelOffsets[scope.id] = BASE_OFFSET;
-        });
-
-        if (scopes.length < 2) return labelOffsets;
-
-        // Map scopes to their screen positions
-        const scopePositions = scopes.map(scope => ({
-            index: scopes.indexOf(scope),
-            id: scope.id,
-            x: Hill.getXAtPosition(scope.position)
-        }));
-
-        // Find groups of nearby scopes that need label stacking
-        const processed = new Set();
-        const groups = [];
-
-        for (let i = 0; i < scopePositions.length; i++) {
-            if (processed.has(scopePositions[i].id)) continue;
-
-            const group = [i];
-            processed.add(scopePositions[i].id);
-
-            for (let j = i + 1; j < scopePositions.length; j++) {
-                if (processed.has(scopePositions[j].id)) continue;
-                if (Math.abs(scopePositions[i].x - scopePositions[j].x) < PROXIMITY_THRESHOLD) {
-                    group.push(j);
-                    processed.add(scopePositions[j].id);
-                }
-            }
-
-            if (group.length > 1) {
-                groups.push(group);
-            }
+    // Double-tap opens the edit modal on touch/pen, where dblclick is unreliable
+    function handleTap(e, scopeId) {
+        if (e.pointerType === 'mouse') return;
+        const now = Date.now();
+        if (lastTap && lastTap.id === scopeId && now - lastTap.time < 350 &&
+            Math.abs(e.clientX - lastTap.x) < 24 && Math.abs(e.clientY - lastTap.y) < 24) {
+            lastTap = null;
+            App.showEditScopeModal(scopeId);
+        } else {
+            lastTap = { id: scopeId, time: now, x: e.clientX, y: e.clientY };
         }
-
-        // Stack labels for each group of overlapping scopes
-        groups.forEach(group => {
-            group.sort((a, b) => scopePositions[a].x - scopePositions[b].x);
-            group.forEach((posIdx, stackLevel) => {
-                const offset = BASE_OFFSET - (stackLevel * LABEL_SPACING);
-                labelOffsets[scopePositions[posIdx].id] = Math.max(offset, MIN_OFFSET);
-            });
-        });
-
-        return labelOffsets;
     }
 
-    // Render a single scope dot and label
-    function renderScope(scope, layer, svg, labelOffset = 0) {
+    // Shorten a label until it fits, keeping the full name available on hover
+    function truncateLabel(label, fullName) {
+        const fullLength = label.getComputedTextLength();
+        if (fullLength <= MAX_LABEL_WIDTH) return;
+
+        let keep = Math.max(1, Math.floor(fullName.length * MAX_LABEL_WIDTH / fullLength));
+        label.textContent = fullName.slice(0, keep).trimEnd() + '…';
+        while (keep > 1 && label.getComputedTextLength() > MAX_LABEL_WIDTH) {
+            keep--;
+            label.textContent = fullName.slice(0, keep).trimEnd() + '…';
+        }
+    }
+
+    // Place labels so they never overlap. Works in absolute-y space (labels ride
+    // the curve, so fixed "tracks" would not be horizontal lines): sort by dot x,
+    // then push each label up in LABEL_SPACING steps until it clears every
+    // already-placed label whose horizontal interval it intersects.
+    function layoutLabels(records, svgWidth) {
+        const placed = [];
+        const ordered = [...records].sort((a, b) => a.dotX - b.dotX || (a.id < b.id ? -1 : 1));
+
+        ordered.forEach(rec => {
+            const width = rec.label.getComputedTextLength();
+            const halfWidth = width / 2;
+
+            // Clamp label center inside the viewBox (backstop for edge dots)
+            const minX = halfWidth + EDGE_PADDING;
+            const maxX = svgWidth - halfWidth - EDGE_PADDING;
+            const cx = minX > maxX ? svgWidth / 2 : Math.min(Math.max(rec.dotX, minX), maxX);
+
+            const start = cx - halfWidth - LABEL_GAP;
+            const end = cx + halfWidth + LABEL_GAP;
+            const naturalY = rec.dotY - BASE_OFFSET;
+            let y = naturalY;
+
+            const collides = () => placed.some(p =>
+                start < p.end && end > p.start && Math.abs(y - p.y) < LABEL_SPACING
+            );
+            while (collides() && y - LABEL_SPACING >= MIN_LABEL_Y) {
+                y -= LABEL_SPACING;
+            }
+            // If still colliding at the top, accept slight overlap over clipping
+            placed.push({ start, end, y });
+
+            rec.label.setAttribute('x', cx);
+            rec.label.setAttribute('y', y);
+
+            // Leader line when a label sits far from its dot, so ownership stays clear.
+            // Styled via attributes (not CSS) so it survives SVG image export.
+            const displaced = naturalY - y >= 2 * LABEL_SPACING || Math.abs(cx - rec.dotX) > 30;
+            if (displaced) {
+                const leader = document.createElementNS(SVG_NS, 'line');
+                leader.setAttribute('class', 'label-leader');
+                leader.setAttribute('x1', cx);
+                leader.setAttribute('y1', y + 4);
+                leader.setAttribute('x2', rec.dotX);
+                leader.setAttribute('y2', rec.dotY - 16);
+                leader.setAttribute('stroke', '#4a5568');
+                leader.setAttribute('stroke-width', 1);
+                leader.setAttribute('stroke-dasharray', '3,3');
+                leader.setAttribute('opacity', 0.6);
+                rec.group.insertBefore(leader, rec.group.firstChild);
+            }
+        });
+    }
+
+    // Render a single scope dot and label at its natural position
+    function renderScope(scope, layer, svg) {
         const x = Hill.getXAtPosition(scope.position);
         const y = Hill.getYAtPosition(scope.position);
         const color = getColorForName(scope.name);
 
         // Create SVG group for this scope
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const group = document.createElementNS(SVG_NS, 'g');
         group.setAttribute('class', 'scope-group');
         group.setAttribute('data-scope-id', scope.id);
+
+        // Native tooltip with the full (possibly truncated) name
+        const titleEl = document.createElementNS(SVG_NS, 'title');
+        titleEl.textContent = scope.name;
+        group.appendChild(titleEl);
 
         // Render dot (sketchy or fallback)
         if (typeof rough !== 'undefined') {
@@ -150,12 +207,13 @@ const Scope = (function () {
                 stroke: '#ffffff',
                 strokeWidth: 2.5,
                 roughness: 0.3,
-                bowing: 0.2
+                bowing: 0.2,
+                seed: seedFromId(scope.id)
             });
             dot.setAttribute('class', 'scope-dot');
             group.appendChild(dot);
         } else {
-            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            const dot = document.createElementNS(SVG_NS, 'circle');
             dot.setAttribute('class', 'scope-dot');
             dot.setAttribute('cx', x);
             dot.setAttribute('cy', y);
@@ -166,39 +224,32 @@ const Scope = (function () {
             group.appendChild(dot);
         }
 
-        // Render label with offset to avoid overlaps
-        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        // Render label; layoutLabels() adjusts x/y after measuring
+        const label = document.createElementNS(SVG_NS, 'text');
         label.setAttribute('class', 'scope-label');
         label.setAttribute('x', x);
-        label.setAttribute('y', y + labelOffset);
+        label.setAttribute('y', y - BASE_OFFSET);
         label.textContent = scope.name;
         group.appendChild(label);
 
         // Attach event handlers
-        group.addEventListener('mousedown', (e) => startDrag(e, scope.id));
-        group.addEventListener('touchstart', (e) => startDrag(e, scope.id), { passive: false });
+        group.addEventListener('pointerdown', (e) => startDrag(e, scope.id));
+        group.addEventListener('pointerup', (e) => handleTap(e, scope.id));
         group.addEventListener('dblclick', () => App.showEditScopeModal(scope.id));
 
         layer.appendChild(group);
 
-        const viewBox = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : null;
-        const svgWidth = viewBox ? viewBox.width : (Hill.config.svgWidth || 800);
-        const labelPadding = 6;
-        const labelBox = label.getBBox();
-        const halfWidth = labelBox.width / 2;
-        const minX = halfWidth + labelPadding;
-        const maxX = svgWidth - halfWidth - labelPadding;
-        let clampedX = x;
+        return { id: scope.id, dotX: x, dotY: y, group, label, name: scope.name };
+    }
 
-        if (minX > maxX) {
-            clampedX = svgWidth / 2;
-        } else {
-            clampedX = Math.min(Math.max(x, minX), maxX);
-        }
-
-        if (clampedX !== x) {
-            label.setAttribute('x', clampedX);
-        }
+    // Hint shown when the chart has no scopes yet (stripped from image export)
+    function renderEmptyHint(layer, svgWidth) {
+        const hint = document.createElementNS(SVG_NS, 'text');
+        hint.setAttribute('class', 'empty-hint');
+        hint.setAttribute('x', svgWidth / 2);
+        hint.setAttribute('y', 55);
+        hint.textContent = 'Click + Add Scope (or press N) to add your first scope';
+        layer.appendChild(hint);
     }
 
     // Render all scopes
@@ -209,11 +260,19 @@ const Scope = (function () {
 
         const state = State.get();
 
-        // Calculate label offsets to avoid overlaps
-        const labelOffsets = calculateLabelOffsets(state.scopes);
+        const viewBox = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : null;
+        const svgWidth = viewBox ? viewBox.width : (Hill.config.svgWidth || 900);
 
-        // Render each scope with its calculated label offset
-        state.scopes.forEach(scope => renderScope(scope, layer, svg, labelOffsets[scope.id]));
+        if (state.scopes.length === 0) {
+            renderEmptyHint(layer, svgWidth);
+            return;
+        }
+
+        // Two passes: render everything at natural position first, then measure
+        // real label widths and resolve collisions
+        const records = state.scopes.map(scope => renderScope(scope, layer, svg));
+        records.forEach(rec => truncateLabel(rec.label, rec.name));
+        layoutLabels(records, svgWidth);
     }
 
     return {

@@ -2,30 +2,51 @@
 const App = (function () {
     let svg;
     let editingScopeId = null;
+    let renderQueued = false;
 
     // Initialize the application
     function init() {
         svg = document.getElementById('hill-svg');
 
-        // Initialize state from URL or defaults
-        State.init();
+        // Initialize state from URL or defaults; surface load problems as toasts
+        State.init((msg) => UI.notify(msg, 'error'));
 
-        // Subscribe to state changes
-        State.subscribe(render);
+        // Subscribe to state changes (coalesced through rAF: dragging fires a
+        // state update per pointer move, and each render re-measures labels)
+        State.subscribe(scheduleRender);
 
         // Set up event listeners
         setupEventListeners();
 
         // Initial render
         render();
+
+        // Label widths are measured during render; re-render once the webfont
+        // arrives so truncation and collision layout use real metrics
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(scheduleRender);
+        }
+    }
+
+    function scheduleRender() {
+        if (renderQueued) return;
+        renderQueued = true;
+        requestAnimationFrame(() => {
+            renderQueued = false;
+            render();
+        });
     }
 
     // Render the entire chart
     function render() {
         const state = State.get();
 
-        // Update title
-        document.getElementById('chart-title').value = state.title;
+        // Update title, but never while the user is typing in it (rewriting the
+        // value mid-IME-composition breaks CJK input)
+        const titleInput = document.getElementById('chart-title');
+        if (document.activeElement !== titleInput && titleInput.value !== state.title) {
+            titleInput.value = state.title;
+        }
 
         // Render hill curve (always sketchy)
         Hill.render(svg);
@@ -42,50 +63,27 @@ const App = (function () {
             State.update({ title: e.target.value });
         });
 
-        // Add scope button
+        // Toolbar buttons
         document.getElementById('add-scope-btn').addEventListener('click', showAddScopeModal);
-
-        // Help button
         document.getElementById('help-btn').addEventListener('click', showHelpModal);
-
-        // Copy link button
         document.getElementById('copy-link-btn').addEventListener('click', Export.copyLink);
-
-        // Export image button
         document.getElementById('export-btn').addEventListener('click', Export.copyToClipboard);
 
-        // Add scope modal
         const addModal = document.getElementById('add-scope-modal');
         const scopeNameInput = document.getElementById('scope-name-input');
-
-        // Edit scope modal
         const editModal = document.getElementById('edit-scope-modal');
         const editNameInput = document.getElementById('edit-scope-name-input');
+        const helpModal = document.getElementById('help-modal');
 
-        // Helper to close a modal
-        function closeModal(modal) {
-            modal.classList.remove('active');
-            if (modal === editModal) {
-                editingScopeId = null;
-            }
-        }
-
-        // Setup backdrop click handlers for both modals
-        [addModal, editModal].forEach(modal => {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) closeModal(modal);
-            });
-        });
-
-        // Add modal handlers
-        document.getElementById('modal-cancel').addEventListener('click', () => closeModal(addModal));
+        // Add modal handlers (Escape/backdrop/focus handled by UI.openModal)
+        document.getElementById('modal-cancel').addEventListener('click', () => UI.closeModal(addModal));
 
         document.getElementById('modal-add').addEventListener('click', () => {
             const name = scopeNameInput.value.trim();
             if (name) {
                 State.addScope(name);
                 scopeNameInput.value = '';
-                closeModal(addModal);
+                UI.closeModal(addModal);
             }
         });
 
@@ -93,13 +91,11 @@ const App = (function () {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 document.getElementById('modal-add').click();
-            } else if (e.key === 'Escape') {
-                closeModal(addModal);
             }
         });
 
         // Edit modal handlers
-        document.getElementById('edit-modal-cancel').addEventListener('click', () => closeModal(editModal));
+        document.getElementById('edit-modal-cancel').addEventListener('click', () => UI.closeModal(editModal));
 
         document.getElementById('modal-save').addEventListener('click', () => {
             if (editingScopeId) {
@@ -107,14 +103,14 @@ const App = (function () {
                 if (name) {
                     State.updateScope(editingScopeId, { name });
                 }
-                closeModal(editModal);
+                UI.closeModal(editModal);
             }
         });
 
         document.getElementById('modal-delete').addEventListener('click', () => {
             if (editingScopeId) {
                 State.removeScope(editingScopeId);
-                closeModal(editModal);
+                UI.closeModal(editModal);
             }
         });
 
@@ -122,28 +118,19 @@ const App = (function () {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 document.getElementById('modal-save').click();
-            } else if (e.key === 'Escape') {
-                closeModal(editModal);
             }
         });
 
         // Help modal handler
-        document.getElementById('help-modal-close').addEventListener('click', () => {
-            const helpModal = document.getElementById('help-modal');
-            helpModal.classList.remove('active');
-        });
-
-        const helpModal = document.getElementById('help-modal');
-        helpModal.addEventListener('click', (e) => {
-            if (e.target === helpModal) {
-                helpModal.classList.remove('active');
-            }
-        });
+        document.getElementById('help-modal-close').addEventListener('click', () => UI.closeModal(helpModal));
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            // Don't trigger shortcuts when typing in inputs
-            if (e.target.tagName === 'INPUT') return;
+            // Don't trigger on modified keys, while typing, or while a modal is open
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            const t = e.target;
+            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+            if (document.querySelector('.modal-overlay.active')) return;
 
             if (e.key === 'n' || e.key === 'N') {
                 showAddScopeModal();
@@ -155,8 +142,7 @@ const App = (function () {
     function showAddScopeModal() {
         const modal = document.getElementById('add-scope-modal');
         const input = document.getElementById('scope-name-input');
-        modal.classList.add('active');
-        setTimeout(() => input.focus(), 100);
+        UI.openModal(modal, { initialFocus: input });
     }
 
     // Show edit scope modal
@@ -168,17 +154,17 @@ const App = (function () {
         const modal = document.getElementById('edit-scope-modal');
         const input = document.getElementById('edit-scope-name-input');
         input.value = scope.name;
-        modal.classList.add('active');
-        setTimeout(() => {
-            input.focus();
-            input.select();
-        }, 100);
+        UI.openModal(modal, {
+            initialFocus: input,
+            selectText: true,
+            onClose: () => { editingScopeId = null; }
+        });
     }
 
     // Show help modal
     function showHelpModal() {
         const modal = document.getElementById('help-modal');
-        modal.classList.add('active');
+        UI.openModal(modal, { initialFocus: document.getElementById('help-modal-close') });
     }
 
     // Initialize when DOM is ready

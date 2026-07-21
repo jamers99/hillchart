@@ -75,7 +75,6 @@ body {
     background: transparent;
     border: none;
     color: var(--text-primary);
-    outline: none;
     padding: 8px 12px;
     border-radius: 6px;
     min-width: 200px;
@@ -85,6 +84,11 @@ body {
 .chart-title:hover,
 .chart-title:focus {
     background-color: var(--bg-tertiary);
+}
+
+.chart-title:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
 }
 
 .toolbar-actions {
@@ -188,6 +192,7 @@ body {
 /* Scope Styles */
 .scope-group {
     cursor: grab;
+    touch-action: none;
 }
 
 .scope-group:active {
@@ -210,6 +215,15 @@ body {
     text-anchor: middle;
     pointer-events: none;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.empty-hint {
+    font-family: 'Open Sans', sans-serif;
+    fill: var(--text-secondary);
+    font-size: 20px;
+    font-style: italic;
+    text-anchor: middle;
+    pointer-events: none;
 }
 
 /* Modal */
@@ -265,12 +279,17 @@ body {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
     font-size: 1.4rem;
-    outline: none;
     margin-bottom: 20px;
 }
 
 .modal input:focus {
     border-color: var(--accent-blue);
+    outline: none;
+}
+
+.modal input:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 1px;
 }
 
 .modal-actions {
@@ -352,4 +371,20 @@ body {
         font-size: 0.85rem;
     }
 
+}
+
+/* Reduced motion: kill transitions and hover hops, keep the static rotations */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+    }
+
+    .btn-primary:hover,
+    .btn-secondary:hover,
+    .btn-danger:hover {
+        transform: rotate(-0.5deg);
+    }
 }

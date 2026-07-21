@@ -30,4 +30,4 @@ Hill Charts visualize project progress. Each scope moves along a hill:
 
 - Vanilla JavaScript (ES6 modules)
 - [RoughJS](https://roughjs.com/) for sketched style
-- [Caveat](https://fonts.google.com/specimen/Caveat) font (embedded)
+- [Open Sans](https://fonts.google.com/specimen/Open+Sans) font (embedded for image export)

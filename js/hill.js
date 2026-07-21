@@ -57,14 +57,14 @@ const Hill = (function () {
     }
 
     // Calculate actual X coordinate from normalized position
-    function getXAtPosition(normalizedX, svgWidth = (config.svgWidth || 800)) {
+    function getXAtPosition(normalizedX, svgWidth = (config.svgWidth || 900)) {
         const startX = config.padding;
         const endX = svgWidth - config.padding;
         return startX + normalizedX * (endX - startX);
     }
 
     // Convert mouse/touch X to normalized position (0-1)
-    function normalizeX(x, svgWidth = (config.svgWidth || 800)) {
+    function normalizeX(x, svgWidth = (config.svgWidth || 900)) {
         const startX = config.padding;
         const endX = svgWidth - config.padding;
         const clamped = Math.max(startX, Math.min(endX, x));

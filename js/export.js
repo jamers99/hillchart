@@ -11,6 +11,7 @@ const Export = (function () {
         }
 
         const svgClone = svg.cloneNode(true);
+        svgClone.querySelectorAll('.empty-hint').forEach(el => el.remove());
         embedFontInSVG(svgClone);
         inlineTextStyles(svgClone);
 
@@ -39,26 +40,34 @@ const Export = (function () {
             borderWidth: border.top
         });
 
-        return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas export produced no image'));
+                }
+            }, 'image/png');
+        });
     }
 
     function embedFontInSVG(svgElement) {
         const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
         styleEl.textContent = `
             @font-face {
-                font-family: 'Caveat';
+                font-family: 'Open Sans';
                 font-style: normal;
                 font-weight: 400;
-                src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
+                src: url(data:font/woff2;charset=utf-8;base64,${OPEN_SANS_400_BASE64}) format('woff2');
             }
             @font-face {
-                font-family: 'Caveat';
+                font-family: 'Open Sans';
                 font-style: normal;
                 font-weight: 700;
-                src: url(data:font/truetype;charset=utf-8;base64,${CAVEAT_FONT_BASE64}) format('truetype');
+                src: url(data:font/woff2;charset=utf-8;base64,${OPEN_SANS_700_BASE64}) format('woff2');
             }
             text {
-                font-family: 'Caveat', cursive;
+                font-family: 'Open Sans', sans-serif;
                 fill: #eaeaea;
             }
         `;
@@ -68,7 +77,7 @@ const Export = (function () {
     function inlineTextStyles(svgElement) {
         const texts = svgElement.querySelectorAll('text');
         texts.forEach(text => {
-            text.setAttribute('font-family', 'Caveat, cursive');
+            text.setAttribute('font-family', 'Open Sans, sans-serif');
             if (text.classList.contains('scope-label')) {
                 text.setAttribute('fill', '#eaeaea');
                 text.setAttribute('font-size', '22px');
@@ -94,35 +103,38 @@ const Export = (function () {
         img.width = options.drawWidth * 2;
         img.height = options.drawHeight * 2;
 
-        await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            img.src = svgUrl;
-        });
+        try {
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = svgUrl;
+            });
 
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, options.wrapperWidth) * 2;
-        canvas.height = Math.max(1, options.wrapperHeight) * 2;
-        const ctx = canvas.getContext('2d');
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, options.wrapperWidth) * 2;
+            canvas.height = Math.max(1, options.wrapperHeight) * 2;
+            const ctx = canvas.getContext('2d');
 
-        ctx.fillStyle = options.backgroundColor || '#1a1a2e';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = options.backgroundColor || '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        if (options.borderWidth > 0) {
-            ctx.strokeStyle = options.borderColor || '#2a2a4a';
-            ctx.lineWidth = options.borderWidth * 2;
-            const inset = ctx.lineWidth / 2;
-            ctx.strokeRect(inset, inset, canvas.width - ctx.lineWidth, canvas.height - ctx.lineWidth);
+            if (options.borderWidth > 0) {
+                ctx.strokeStyle = options.borderColor || '#2a2a4a';
+                ctx.lineWidth = options.borderWidth * 2;
+                const inset = ctx.lineWidth / 2;
+                ctx.strokeRect(inset, inset, canvas.width - ctx.lineWidth, canvas.height - ctx.lineWidth);
+            }
+
+            const offsetX = options.offsetX * 2;
+            const offsetY = options.offsetY * 2;
+            const drawWidth = options.drawWidth * 2;
+            const drawHeight = options.drawHeight * 2;
+            ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+
+            return canvas;
+        } finally {
+            URL.revokeObjectURL(svgUrl);
         }
-
-        const offsetX = options.offsetX * 2;
-        const offsetY = options.offsetY * 2;
-        const drawWidth = options.drawWidth * 2;
-        const drawHeight = options.drawHeight * 2;
-        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
-
-        URL.revokeObjectURL(svgUrl);
-        return canvas;
     }
 
     function readBoxValues(style, prefix) {
@@ -133,22 +145,34 @@ const Export = (function () {
         return { top, right, bottom, left };
     }
 
-    async function copyToClipboard() {
-        try {
-            const blob = await captureAsBlob();
-
-            if (typeof ClipboardItem !== 'undefined') {
-                await navigator.clipboard.write([
-                    new ClipboardItem({ 'image/png': blob })
-                ]);
-                showNotification('Image copied to clipboard!', 'success');
-            } else {
-                downloadAsPNG();
-            }
-        } catch (err) {
-            console.error('Clipboard write failed:', err);
+    // Deliberately not async: Safari only allows clipboard writes that are
+    // constructed synchronously within the user gesture, so the ClipboardItem
+    // gets the pending blob promise as its value.
+    function copyToClipboard() {
+        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard || !navigator.clipboard.write) {
             downloadAsPNG();
+            return;
         }
+
+        const blobPromise = captureAsBlob();
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })])
+            .then(() => UI.notify('Image copied to clipboard!', 'success'))
+            .catch((err) => {
+                if (err instanceof TypeError) {
+                    // Older Chromium rejects promise values inside ClipboardItem;
+                    // retry with the resolved blob
+                    blobPromise
+                        .then(blob => navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]))
+                        .then(() => UI.notify('Image copied to clipboard!', 'success'))
+                        .catch((retryErr) => {
+                            console.error('Clipboard write failed:', retryErr);
+                            downloadAsPNG();
+                        });
+                } else {
+                    console.error('Clipboard write failed:', err);
+                    downloadAsPNG();
+                }
+            });
     }
 
     async function downloadAsPNG() {
@@ -157,11 +181,12 @@ const Export = (function () {
             const url = URL.createObjectURL(blob);
 
             const state = State.get();
-            const filename = (state.title || 'hillchart')
+            const slug = (state.title || '')
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, '-')
                 .replace(/-+/g, '-')
-                .replace(/^-|-$/g, '') + '.png';
+                .replace(/^-|-$/g, '');
+            const filename = (slug || 'hillchart') + '.png';
 
             const a = document.createElement('a');
             a.href = url;
@@ -171,31 +196,32 @@ const Export = (function () {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            showNotification('Image downloaded!', 'success');
+            UI.notify('Image downloaded!', 'success');
         } catch (err) {
             console.error('Download failed:', err);
-            showNotification('Failed to export image', 'error');
+            UI.notify('Failed to export image', 'error');
         }
     }
 
     function copyLink() {
         const url = State.getShareableURL();
         const state = State.get();
-        const title = state.title || 'Hill Chart';
+        // Escape markdown link-text specials so titles like "[wip] chart" stay valid
+        const title = (state.title || 'Hill Chart').replace(/([\\\[\]])/g, '\\$1');
         const markdownLink = `[${title}](${url})`;
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(markdownLink)
-                .then(() => showNotification('Markdown link copied to clipboard!', 'success'))
+                .then(() => UI.notify('Markdown link copied to clipboard!', 'success'))
                 .catch(() => fallbackCopyLink(markdownLink));
         } else {
             fallbackCopyLink(markdownLink);
         }
     }
 
-    function fallbackCopyLink(url) {
+    function fallbackCopyLink(text) {
         const textarea = document.createElement('textarea');
-        textarea.value = url;
+        textarea.value = text;
         textarea.style.position = 'fixed';
         textarea.style.opacity = '0';
         document.body.appendChild(textarea);
@@ -203,22 +229,12 @@ const Export = (function () {
 
         try {
             document.execCommand('copy');
-            showNotification('Link copied to clipboard!', 'success');
+            UI.notify('Link copied to clipboard!', 'success');
         } catch (err) {
-            showNotification('Failed to copy link', 'error');
+            UI.notify('Failed to copy link', 'error');
         }
 
         document.body.removeChild(textarea);
-    }
-
-    function showNotification(message, type = 'success') {
-        const notification = document.getElementById('notification');
-        notification.textContent = message;
-        notification.className = `notification show ${type}`;
-
-        setTimeout(() => {
-            notification.classList.remove('show');
-        }, 3000);
     }
 
     return {
